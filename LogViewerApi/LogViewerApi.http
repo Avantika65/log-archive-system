@@ -1,0 +1,6 @@
+@LogViewerApi_HostAddress = http://localhost:5262
+
+GET {{LogViewerApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

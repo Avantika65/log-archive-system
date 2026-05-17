@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="LogViewerApi/LogViewerApi.csproj" />
+  <Project Path="myCSharpApp/myCSharpApp.csproj" />
+</Solution>

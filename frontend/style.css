@@ -1,0 +1,42 @@
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.sidebar {
+    width: 300px;
+    border-right: 1px solid #ccc;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+.content {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    padding: 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+}
+
+li:hover {
+    background-color: #f2f2f2;
+}
+
+pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
