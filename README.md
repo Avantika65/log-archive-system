@@ -18,6 +18,7 @@
 
 ## Architecture
 Worker Service → Archive → API → Frontend
+
 myCSharpApp/
     Background worker service
 
