@@ -1,0 +1,28 @@
+# Visual Studio / .NET
+bin/
+obj/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+*.pdb
+*.opendb
+*.VC.db
+*.cache
+*.log
+*.vs/
+
+# Rider
+.idea/
+*.sln.iml
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
