@@ -4,27 +4,20 @@ namespace myCSharpApp;
 
 public class DatabaseService
 {
+    private readonly ILogger<DatabaseService> _logger;
     private readonly string _connectionString;
 
-    public DatabaseService()
+    public DatabaseService(ILogger<DatabaseService> logger, string databasePath = "logs.db")
     {
-        var dbPath = Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "logs.db");
-
-        _connectionString =
-            $"Data Source={dbPath}";
-
+        _logger = logger;
+        _connectionString = $"Data Source={databasePath}";
         InitializeDatabase();
     }
 
     private void InitializeDatabase()
     {
-        using var connection =
-            new SqliteConnection(_connectionString);
-
+        using var connection = new SqliteConnection(_connectionString);
         connection.Open();
-
         var command = connection.CreateCommand();
 
         command.CommandText =
@@ -44,11 +37,8 @@ public class DatabaseService
 
     public bool FileHashExists(string hash)
     {
-        using var connection =
-            new SqliteConnection(_connectionString);
-
+        using var connection = new SqliteConnection(_connectionString);
         connection.Open();
-
         var command = connection.CreateCommand();
 
         command.CommandText =
@@ -58,27 +48,15 @@ public class DatabaseService
             WHERE Hash = $hash
         ";
 
-        command.Parameters.AddWithValue(
-            "$hash",
-            hash);
-
-        var count =
-            Convert.ToInt32(command.ExecuteScalar());
-
+        command.Parameters.AddWithValue("$hash", hash);
+        var count = Convert.ToInt32(command.ExecuteScalar());
         return count > 0;
     }
 
-    public void SaveProcessedFile(
-        string fileName,
-        string sourcePath,
-        string archivePath,
-        string hash)
+    public void SaveProcessedFile(string fileName, string sourcePath, string archivePath, string hash)
     {
-        using var connection =
-            new SqliteConnection(_connectionString);
-
+        using var connection = new SqliteConnection(_connectionString);
         connection.Open();
-
         var command = connection.CreateCommand();
 
         command.CommandText =
@@ -99,26 +77,11 @@ public class DatabaseService
             )
         ";
 
-        command.Parameters.AddWithValue(
-            "$fileName",
-            fileName);
-
-        command.Parameters.AddWithValue(
-            "$sourcePath",
-            sourcePath);
-
-        command.Parameters.AddWithValue(
-            "$archivePath",
-            archivePath);
-
-        command.Parameters.AddWithValue(
-            "$hash",
-            hash);
-
-        command.Parameters.AddWithValue(
-            "$processedAt",
-            DateTime.UtcNow.ToString("O"));
-
+        command.Parameters.AddWithValue("$fileName", fileName);
+        command.Parameters.AddWithValue("$sourcePath", sourcePath);
+        command.Parameters.AddWithValue("$archivePath", archivePath);
+        command.Parameters.AddWithValue("$hash", hash);
+        command.Parameters.AddWithValue("$processedAt", DateTime.UtcNow.ToString("O"));
         command.ExecuteNonQuery();
     }
 }

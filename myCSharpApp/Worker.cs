@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
+using myCSharpApp.Services;
 
 namespace myCSharpApp;
 
@@ -14,15 +15,18 @@ public class Worker : BackgroundService
 
     private readonly DatabaseService _databaseService;
 
+    private readonly ValidationService _validationService;
+
     private readonly List<FileSystemWatcher> _watchers = new();
 
     private readonly HashSet<string> _processingFiles = new();
 
 
-    public Worker(ILogger<Worker> logger)
+    public Worker(ILogger<Worker> logger, DatabaseService databaseService, ValidationService validationService)
     {
         _logger = logger;
-        _databaseService = new DatabaseService();
+        _databaseService = databaseService;
+        _validationService = validationService;
 
         var root = Directory.GetCurrentDirectory();
 
@@ -45,10 +49,12 @@ public class Worker : BackgroundService
         {
             Directory.CreateDirectory(folder);
 
-            var watcher = new FileSystemWatcher(folder);
-            watcher.NotifyFilter =
-                NotifyFilters.FileName |
-                NotifyFilters.CreationTime;
+            var watcher = new FileSystemWatcher(folder)
+            {
+                NotifyFilter =
+                    NotifyFilters.FileName |
+                    NotifyFilters.CreationTime
+            };
 
             watcher.Created += OnFileCreated;
             watcher.IncludeSubdirectories = true;
@@ -72,163 +78,155 @@ public class Worker : BackgroundService
     private async void OnFileCreated(
     object sender,
     FileSystemEventArgs e)
-{
-    try
-    {
-        _logger.LogInformation(
-            "New file detected: {file}",
-            e.FullPath);
-
-        var fileName = Path.GetFileName(e.FullPath);
-
-        // Ignore temp/hidden files
-        if (fileName.StartsWith(".") ||
-            fileName.EndsWith(".tmp"))
-        {
-            _logger.LogInformation(
-                "Ignored temp file: {file}",
-                fileName);
-
-            return;
-        }
-
-        // Prevent duplicate event processing
-        lock (_processingFiles)
-        {
-            if (_processingFiles.Contains(e.FullPath))
-            {
-                _logger.LogWarning(
-                    "Already processing: {file}",
-                    e.FullPath);
-
-                return;
-            }
-
-            _processingFiles.Add(e.FullPath);
-        }
-
-        // Wait until file is fully available
-        int retries = 0;
-
-        while (!IsFileReady(e.FullPath))
-        {
-            retries++;
-
-            if (retries > 10)
-            {
-                _logger.LogError(
-                    "File never became ready: {file}",
-                    e.FullPath);
-
-                return;
-            }
-
-            _logger.LogInformation(
-                "Waiting for file: {file}",
-                e.FullPath);
-
-            await Task.Delay(500);
-        }
-
-        // Generate file hash
-        var hash = ComputeFileHash(e.FullPath);
-
-        // Skip duplicate content
-        if (_databaseService.FileHashExists(hash))
-        {
-            _logger.LogWarning(
-                "Duplicate file skipped: {file}",
-                fileName);
-
-            return;
-        }
-
-        // Preserve source folder structure
-        var parentDirectory =
-            Path.GetDirectoryName(e.FullPath);
-
-        if (string.IsNullOrEmpty(parentDirectory))
-        {
-            _logger.LogWarning(
-                "Invalid directory for file: {file}",
-                e.FullPath);
-
-            return;
-        }
-
-        var sourceFolder =
-            Path.GetFileName(parentDirectory);
-
-        var archiveSubFolder =
-            Path.Combine(_archiveFolder, sourceFolder);
-
-        Directory.CreateDirectory(archiveSubFolder);
-
-        var destinationPath =
-            Path.Combine(archiveSubFolder, fileName);
-
-        // Secondary safety check
-        if (File.Exists(destinationPath))
-        {
-            _logger.LogWarning(
-                "Duplicate skipped: {file}",
-                fileName);
-
-            return;
-        }
-
-        // Copy file asynchronously
-        using var sourceStream =
-            File.OpenRead(e.FullPath);
-
-        using var destinationStream =
-            File.Create(destinationPath);
-
-        await sourceStream.CopyToAsync(destinationStream);
-
-        // Save metadata to SQLite
-        _databaseService.SaveProcessedFile(
-            fileName,
-            e.FullPath,
-            destinationPath,
-            hash);
-
-        _logger.LogInformation(
-            "Copied file: {file}",
-            fileName);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(
-            ex,
-            "Failed processing file: {file}",
-            e.FullPath);
-    }
-    finally
-    {
-        lock (_processingFiles)
-        {
-            _processingFiles.Remove(e.FullPath);
-        }
-    }
-}
-    private bool IsFileReady(string path)
     {
         try
         {
-            using var stream = File.Open(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.None);
+            _logger.LogInformation(
+                "New file detected: {file}",
+                e.FullPath);
 
-            return true;
+            var fileName = Path.GetFileName(e.FullPath);
+
+            // Ignore temp/hidden files
+            if (_validationService.IsTemporaryFile(fileName))
+            {
+                _logger.LogInformation(
+                    "Ignored temp file: {file}",
+                    fileName);
+
+                return;
+            }
+
+            // Prevent duplicate event processing
+            lock (_processingFiles)
+            {
+                if (_processingFiles.Contains(e.FullPath))
+                {
+                    _logger.LogWarning(
+                        "Already processing: {file}",
+                        e.FullPath);
+
+                    return;
+                }
+
+                _processingFiles.Add(e.FullPath);
+            }
+
+            // Wait until file is fully available
+            int retries = 0;
+
+            while (!_validationService.IsFileReady(e.FullPath))
+            {
+                retries++;
+
+                if (retries > 10)
+                {
+                    _logger.LogError(
+                        "File never became ready: {file}",
+                        e.FullPath);
+
+                    return;
+                }
+
+                _logger.LogInformation(
+                    "Waiting for file: {file}",
+                    e.FullPath);
+
+                await Task.Delay(500);
+            }
+            if (!_validationService
+                    .ValidateFile(e.FullPath))
+            {
+                _logger.LogError(
+                    "File validation failed: {file}",
+                    e.FullPath);
+
+                return;
+            }
+
+            // Generate file hash
+            var hash = ComputeFileHash(e.FullPath);
+
+            // Skip duplicate content
+            if (_databaseService.FileHashExists(hash))
+            {
+                _logger.LogWarning(
+                    "Duplicate file skipped: {file}",
+                    fileName);
+
+                return;
+            }
+
+            // Preserve source folder structure
+            var parentDirectory =
+                Path.GetDirectoryName(e.FullPath);
+
+            if (string.IsNullOrEmpty(parentDirectory))
+            {
+                _logger.LogWarning(
+                    "Invalid directory for file: {file}",
+                    e.FullPath);
+
+                return;
+            }
+
+            var sourceFolder =
+                Path.GetFileName(parentDirectory);
+
+            var archiveSubFolder =
+                Path.Combine(_archiveFolder, sourceFolder);
+
+            Directory.CreateDirectory(archiveSubFolder);
+
+            var destinationPath =
+                Path.Combine(archiveSubFolder, fileName);
+
+            // Secondary safety check
+            if (File.Exists(destinationPath))
+            {
+                _logger.LogWarning(
+                    "Duplicate skipped: {file}",
+                    fileName);
+
+                return;
+            }
+
+            // Copy file asynchronously
+            using var sourceStream =
+                File.OpenRead(e.FullPath);
+
+            using var destinationStream =
+                File.Create(destinationPath);
+
+            await sourceStream.CopyToAsync(destinationStream);
+
+            // Save metadata to SQLite
+            _databaseService.SaveProcessedFile(
+                fileName,
+                e.FullPath,
+                destinationPath,
+                hash);
+
+            _logger.LogInformation(
+                "Copied file: {file}",
+                fileName);
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            _logger.LogError(
+                ex,
+                "Failed processing file: {file}",
+                e.FullPath);
+        }
+        finally
+        {
+            lock (_processingFiles)
+            {
+                _processingFiles.Remove(e.FullPath);
+            }
         }
     }
+
 
     private string ComputeFileHash(string path)
     {
