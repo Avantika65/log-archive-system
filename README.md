@@ -17,7 +17,19 @@
 - HTML/CSS/JS
 
 ## Architecture
-Worker Service → Archive → API → Frontend
+FileSystemWatcher
+        ↓
+Worker
+        ↓
+FileProcessingService
+        ↓
+ValidationService
+        ↓
+DatabaseService
+        ↓
+SQLite
+
+
 - myCSharpApp/
     Background worker service
 - LogViewerApi/
