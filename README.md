@@ -17,16 +17,11 @@
 - HTML/CSS/JS
 
 ## Architecture
-FileSystemWatcher
-        ↓
-Worker
-        ↓
-FileProcessingService
-        ↓
-ValidationService
-        ↓
-DatabaseService
-        ↓
+FileSystemWatcher ->
+Worker->
+FileProcessingService->
+ValidationService->
+DatabaseService->
 SQLite
 
 
