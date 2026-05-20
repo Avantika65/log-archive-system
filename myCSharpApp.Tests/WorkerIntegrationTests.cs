@@ -32,7 +32,7 @@ public class WorkerIntegrationTests
 
         var processingLogger = new Mock<ILogger<FileProcessingService>>();
         var fileProcessingService = new FileProcessingService(processingLogger.Object, validationService, databaseService);
-        var worker = new Worker(logger.Object, databaseService, validationService, fileProcessingService, settings);
+        var worker = new Worker(logger.Object, fileProcessingService, settings);
         var testFile = Path.Combine(sourceFolder, "test.log");
 
         await File.WriteAllTextAsync(testFile, "integration test");
