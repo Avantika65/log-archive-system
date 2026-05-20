@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="LogViewerApi/LogViewerApi.csproj" />
+  <Project Path="myCSharpApp.Tests/myCSharpApp.Tests.csproj" />
   <Project Path="myCSharpApp/myCSharpApp.csproj" />
 </Solution>
