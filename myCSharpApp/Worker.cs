@@ -12,18 +12,12 @@ public class Worker : BackgroundService
     private readonly string[] _sourceFolders;
     private readonly WorkerSettings _settings;
     private readonly string _archiveFolder;
-    private readonly DatabaseService _databaseService;
-    private readonly ValidationService _validationService;
     private readonly FileProcessingService _fileProcessingService;
     private readonly List<FileSystemWatcher> _watchers = new();
-    private readonly HashSet<string> _processingFiles = new();
 
-    public Worker(ILogger<Worker> logger, DatabaseService databaseService, 
-    ValidationService validationService, FileProcessingService fileProcessingService, IOptions<WorkerSettings> options)
+    public Worker(ILogger<Worker> logger, FileProcessingService fileProcessingService, IOptions<WorkerSettings> options)
     {
         _logger = logger;
-        _databaseService = databaseService;
-        _validationService = validationService;
         _fileProcessingService = fileProcessingService;
         _settings = options.Value;
 
@@ -35,12 +29,19 @@ public class Worker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         Directory.CreateDirectory(_archiveFolder);
-        foreach (var folder in _sourceFolders)
-        {
+        foreach (var folder in _sourceFolders) {
             Directory.CreateDirectory(folder);
-            var watcher = new FileSystemWatcher(folder)
-            {
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime
+            var files = Directory.GetFiles(folder);
+
+            foreach (var file in files) {
+                if (stoppingToken.IsCancellationRequested) { 
+                    break;
+                }
+                await _fileProcessingService.ProcessFileAsync(file, _archiveFolder);
+            }
+
+            var watcher = new FileSystemWatcher(folder) {
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite
             };
 
             watcher.Created += OnFileCreated;
@@ -48,27 +49,30 @@ public class Worker : BackgroundService
             watcher.EnableRaisingEvents = true;
 
             _watchers.Add(watcher);
-
             _logger.LogInformation("Watching folder: {folder}", folder);
         }
 
         _logger.LogInformation("Worker started.");
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
+        while (!stoppingToken.IsCancellationRequested) {
             await Task.Delay(1000, stoppingToken);
         }
     }
 
     private async void OnFileCreated(object sender, FileSystemEventArgs e)
     {
-        try
-        {
+        try {
             await _fileProcessingService.ProcessFileAsync( e.FullPath, _archiveFolder);
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
             _logger.LogError(ex, "Failed processing file: {file}", e.FullPath);
         }        
+    }
+
+    public override void Dispose() {
+        foreach (var watcher in _watchers) {
+            watcher.Dispose();
+        }
+        base.Dispose();
     }
 }
